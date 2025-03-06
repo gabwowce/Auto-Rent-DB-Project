@@ -11,14 +11,44 @@ CREATE PROCEDURE CreateUzsakymas(
     IN in_nuomosData DATE,
     IN in_grazinimoData DATE,
     IN in_paemimoVietaID INT,
-    IN in_grazinimoVietaID INT
+    IN in_grazinimoVietaID INT,
+    IN in_papildomosPaslaugos TEXT  -- sąrašas paslaugų ID (pvz., "1,2,3")
 )
 BEGIN
     DECLARE v_dienosNuomos INT;
     DECLARE v_kainaParai DECIMAL(10,2);
     DECLARE v_bendraKaina DECIMAL(10,2);
+    DECLARE v_autoUzimtas INT DEFAULT 0;
+    DECLARE v_klientasUzimtas INT DEFAULT 0;
+    DECLARE v_uzsakymoID INT;
 
-    -- Apskaičiuojame nuomos trukmę ir bendrą kainą
+    -- 1️⃣ Tikriname, ar automobilis jau rezervuotas arba išnuomotas pasirinktomis dienomis
+    SELECT COUNT(*) INTO v_autoUzimtas
+    FROM Uzsakymai
+    WHERE automobilio_id = in_automobilioID
+      AND uzsakymo_busena IN ('patvirtinta', 'isnuomota')
+      AND (nuomos_data BETWEEN in_nuomosData AND in_grazinimoData
+           OR grazinimo_data BETWEEN in_nuomosData AND in_grazinimoData);
+
+    IF v_autoUzimtas > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Automobilis jau rezervuotas arba išnuomotas tomis dienomis.';
+    END IF;
+
+    -- 2️⃣ Tikriname, ar klientas neturi kitos rezervacijos tomis dienomis
+    SELECT COUNT(*) INTO v_klientasUzimtas
+    FROM Uzsakymai
+    WHERE kliento_id = in_klientoID
+      AND uzsakymo_busena IN ('patvirtinta', 'isnuomota')
+      AND (nuomos_data BETWEEN in_nuomosData AND in_grazinimoData
+           OR grazinimo_data BETWEEN in_nuomosData AND in_grazinimoData);
+
+    IF v_klientasUzimtas > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Klientas jau turi kitą rezervuotą automobilį tomis dienomis.';
+    END IF;
+
+    -- 3️⃣ Apskaičiuojame nuomos trukmę ir bendrą kainą
     SELECT DATEDIFF(in_grazinimoData, in_nuomosData) INTO v_dienosNuomos;
     SELECT kaina_parai INTO v_kainaParai 
       FROM Automobiliai 
@@ -27,7 +57,7 @@ BEGIN
 
     START TRANSACTION;
 
-    -- Įrašome naują užsakymą
+    -- 4️⃣ Įrašome naują užsakymą (būsena "rezervuota")
     INSERT INTO Uzsakymai (
         kliento_id, automobilio_id, darbuotojo_id, nuomos_data,
         grazinimo_data, paemimo_vietos_id, grazinimo_vietos_id,
@@ -36,26 +66,64 @@ BEGIN
     VALUES (
         in_klientoID, in_automobilioID, in_darbuotojoID, in_nuomosData,
         in_grazinimoData, in_paemimoVietaID, in_grazinimoVietaID,
-        v_bendraKaina, 'patvirtinta', FALSE
+        v_bendraKaina, 'rezervuota', IF(LENGTH(in_papildomosPaslaugos) > 0, TRUE, FALSE)
     );
 
-    -- Įrašome rezervaciją
-    INSERT INTO Rezervavimas (
-        kliento_id, automobilio_id, rezervacijos_pradzia, rezervacijos_pabaiga, busena
-    )
-    VALUES (
-        in_klientoID, in_automobilioID, in_nuomosData, in_grazinimoData, 'patvirtinta'
-    );
+    -- Gauti paskutinio įterpto užsakymo ID
+    SET v_uzsakymoID = LAST_INSERT_ID();
 
-    -- Atnaujiname automobilio statusą
-    UPDATE Automobiliai
-    SET automobilio_statusas = 'isnuomotas'
-    WHERE automobilio_id = in_automobilioID;
+    -- 5️⃣ Jei yra papildomų paslaugų, įrašome jas į `Uzsakymo_Paslaugos`
+    IF LENGTH(in_papildomosPaslaugos) > 0 THEN
+        SET @sql = CONCAT(
+            'INSERT INTO Uzsakymo_Paslaugos (uzsakymo_id, paslaugos_id) ',
+            'SELECT ', v_uzsakymoID, ', paslaugos_id FROM Papildomos_Paslaugos ',
+            'WHERE FIND_IN_SET(paslaugos_id, "', in_papildomosPaslaugos, '") > 0'
+        );
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
 
     COMMIT;
 
-    SELECT 'Transakcija sėkminga' AS rezultatas;
+    SELECT 'Rezervacija sukurta sėkmingai. Automobilis rezervuotas.' AS rezultatas;
 END
 
+-- Tai pridės papildomas paslaugas, kurių ID yra 1, 3 ir 5
+CALL CreateUzsakymas(3, 21, 2, '2025-03-14', '2025-03-20', 1, 2, '1,3,5');
 
-CALL CreateUzsakymas(3, 21, 2, '2025-03-14', '2025-03-20', 1, 2);
+
+-- Jei papildomų paslaugų nereikia, galima kviesti taip:
+CALL CreateUzsakymas(3, 21, 2, '2025-03-14', '2025-03-20', 1, 2, '');
+
+
+
+
+-- EVENT, kuris kasdien atnaujina rezervuotus automobilius į išnuomotus
+
+CREATE EVENT UpdateAutoStatus 
+ON SCHEDULE EVERY 1 DAY
+DO
+BEGIN
+    UPDATE Uzsakymai 
+    SET uzsakymo_busena = 'isnuomotas'
+    WHERE uzsakymo_busena = 'rezervuota'
+      AND nuomos_data = CURDATE();
+      
+    UPDATE Automobiliai 
+    SET automobilio_statusas = 'isnuomotas'
+    WHERE automobilio_id IN (
+        SELECT automobilio_id FROM Uzsakymai WHERE uzsakymo_busena = 'isnuomotas'
+    );
+END;
+
+
+
+
+
+
+
+
+
+
+
