@@ -98,27 +98,31 @@ CALL CreateUzsakymas(3, 21, 2, '2025-03-14', '2025-03-20', 1, 2, '');
 
 
 
-
--- EVENT, kuris kasdien atnaujina rezervuotus automobilius į išnuomotus
-
-CREATE EVENT UpdateAutoStatus 
-ON SCHEDULE EVERY 1 DAY
-DO
-BEGIN
-    UPDATE Uzsakymai 
-    SET uzsakymo_busena = 'isnuomotas'
-    WHERE uzsakymo_busena = 'rezervuota'
-      AND nuomos_data = CURDATE();
-      
-    UPDATE Automobiliai 
-    SET automobilio_statusas = 'isnuomotas'
-    WHERE automobilio_id IN (
-        SELECT automobilio_id FROM Uzsakymai WHERE uzsakymo_busena = 'isnuomotas'
-    );
-END;
+-------------------------------------------------------------------------------------------------------------------
 
 
+-- Pradėti transakciją
+START TRANSACTION;
 
+-- 1. Naujos baudos registravimas klientui
+INSERT INTO `Baudu_Registras` (
+    `automobilio_id`, `baudos_priezastis`, `data`, `laikas`, `suma`, `kliento_id`
+) VALUES 
+(25, 'Neleistinas parkavimas', '2025-03-15', '14:30:00', 50.00, 6);
+
+-- 2. Sumažinami kliento bonuso taškai
+UPDATE `Klientai` 
+SET `bonus_taskai` = GREATEST(0, `bonus_taskai` - 50)
+WHERE `id` = 6;
+
+-- Patvirtinti transakciją
+COMMIT;
+
+START TRANSACTION;
+UPDATE `Klientai` 
+SET `bonus_taskai` = GREATEST(0, `bonus_taskai` - 50)
+WHERE `id` = 6;
+COMMIT;
 
 
 
