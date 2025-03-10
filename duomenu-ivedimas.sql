@@ -386,6 +386,19 @@ INSERT INTO `Automobilio_Grazinimo_Vietos` (
 
 
 
+-- Pridėti naują stulpelį "laikas"
+ALTER TABLE `Baudu_Registras` ADD COLUMN `laikas` TIME NOT NULL DEFAULT '00:00:00';
+
+-- Atnaujinti esamus įrašus atsitiktiniu laiku tarp 07:00:00 ir 23:59:59
+UPDATE `Baudu_Registras`
+SET `laikas` = SEC_TO_TIME(FLOOR(RAND() * (23*3600 + 59*60 + 59 - 7*3600) + 7*3600));
+
+
+select * from Baudu_Registras
+
+
+-- Pervadinti lentelę
+RENAME TABLE `Automobilio_Grazinimo_Vietos` TO `Automobilio_Grazinimo_Vieta`;
 
 
 
