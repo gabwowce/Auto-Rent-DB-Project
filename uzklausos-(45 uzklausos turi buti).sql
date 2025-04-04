@@ -51,35 +51,164 @@ JOIN Klientai k ON u.kliento_id = k.kliento_id
 LEFT JOIN Mokejimai m ON s.saskaitos_id = m.uzsakymo_id
 WHERE m.mokejimo_id IS NULL;
  
-
+--gtama tikslinimui:
 -- 7. Klientų palaikymas. Gauti visus klientų užklausas, kurios dar neatsakytos
+SELECT * 
+FROM klientu_uzklausos
+WHERE atsakymo_data IS NULL;
+-- Arba jeigu yra boolean laukas:
+SELECT * 
+FROM klientu_uzklausos
+WHERE atsakyta = 0;
+
 -- 8. Klientų palaikymas. Rasti vidutinį laiką, per kurį darbuotojai atsako į užklausas
+SELECT AVG(TIMESTAMPDIFF(SECOND, sukurta_data, atsakymo_data)) AS vidutinis_atsakymo_laikas_sekundemis
+FROM klientu_uzklausos
+WHERE atsakymo_data IS NOT NULL;
+
 -- 9. Automobilių atsiliepimai. Gauti vidutinį automobilio įvertinimą pagal jo ID
+SELECT automobilio_id, AVG(ivertinimas) AS vidutinis_ivertinimas
+FROM automobiliu_atsiliepimai
+GROUP BY automobilio_id;
+-- Jeigu reikia konkrečiam automobiliui, tarkim ID = 3:
+SELECT AVG(ivertinimas) AS vidutinis_ivertinimas
+FROM automobiliu_atsiliepimai
+WHERE automobilio_id = 3;
+
 -- 10. Automobilių servisas. Rasti visus šiuo metu servise esančius automobilius
+SELECT * 
+FROM serviso_darbai
+WHERE pabaigos_data IS NULL;
+
 -- 11.Automobilių servisas. Gauti kiekvieno automobilio serviso darbų vidutinę kainą
+SELECT automobilio_id, AVG(kaina) AS vidutine_kaina
+FROM serviso_darbai
+GROUP BY automobilio_id;
+
 -- 12.Kuro sąnaudos. Rasti automobilį, kuris sunaudojo daugiausiai kuro per paskutinį mėnesį
+SELECT automobilio_id, SUM(kiekis_litrais) AS sunaudotas_kiekis
+FROM kuro_sanaudos
+WHERE data >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
+GROUP BY automobilio_id
+ORDER BY sunaudotas_kiekis DESC
+LIMIT 1;
+
 -- 13.Kuro sąnaudos. Apskaičiuoti kuro vidutinę kainą pagal datas
+SELECT data, AVG(kaina_uz_litra) AS vidutine_kaina
+FROM kuro_sanaudos
+GROUP BY data
+ORDER BY data;
+
 -- 14.Remonto darbai. Apskaičiuoti vidutinę remonto kainą pagal servisus
+SELECT serviso_id, AVG(kaina) AS vidutine_remonto_kaina
+FROM remonto_darbai
+GROUP BY serviso_id;
+
 -- 15.Atrinkti automobilius, kurie buvo remontuojami daugiau nei 3 kartus per metus
+SELECT automobilio_id, YEAR(data) AS metai, COUNT(*) AS remonto_kartu
+FROM remonto_darbai
+GROUP BY automobilio_id, YEAR(data)
+HAVING remonto_kartu > 3;
+
 -- 16.Draudimai. Atrinkti visus automobilius, kurių draudimas baigsis per artimiausias 30 dienų
+SELECT automobilio_id, pabaigos_data
+FROM draudimai
+WHERE pabaigos_data BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY);
+
 -- 17.Draudimai. Atrinkti automobilius, kurie šiuo metu neturi galiojančio draudimo
+SELECT automobilio_id
+FROM draudimai
+WHERE pabaigos_data < CURDATE();
+
 -- 18.Baudų registras. Gauti visas baudas, kurios viršija 100 EUR
+SELECT *
+FROM baudos
+WHERE baudos_suma > 100;
+
 -- 19.Baudų registras.Rasti automobilius su didžiausia bendra baudų suma
+SELECT automobilio_id, SUM(baudos_suma) AS bendra_baudu_suma
+FROM baudos
+GROUP BY automobilio_id
+ORDER BY bendra_baudu_suma DESC
+LIMIT 1;
+
 -- 20.Darbuotojai. Atrinkti visus darbuotojus, dirbančius daugiau nei 5 metus
+SELECT *
+FROM darbuotojai
+WHERE darbo_pradzios_data <= DATE_SUB(CURDATE(), INTERVAL 5 YEAR);
+
 -- 21.Darbuotojai. Gauti darbuotoją su didžiausiu atlyginimu
+SELECT *
+FROM darbuotojai
+ORDER BY atlyginimas DESC
+LIMIT 1;
+
 -- 22.Atsakingi automobiliai. Gauti visus darbuotojus, kurie šiuo metu atsakingi už bent vieną automobilį
+SELECT DISTINCT darbuotojo_id
+FROM atsakingi_automobiliai
+WHERE pabaigos_data IS NULL;
+
 -- 23.Atsakingi automobiliai.Rasti darbuotoją, kuris ilgiausiai atsakingas už konkretų automobilį
+SELECT darbuotojo_id, MIN(pradzios_data) AS atsakomybes_pradzia
+FROM atsakingi_automobiliai
+WHERE automobilio_id = 3
+GROUP BY darbuotojo_id
+ORDER BY atsakomybes_pradzia ASC
+LIMIT 1;
+
 -- 24.Papildomos paslaugos. Apskaičiuoti vidutinę papildomų paslaugų sumą už užsakymą
+SELECT uzsakymo_id, SUM(kaina) AS bendra_papildomu_paslaugų_suma
+FROM papildomos_paslaugos
+GROUP BY uzsakymo_id;
+
 -- 25.Papildomos paslaugos. Rasti populiariausią papildomą paslaugą pagal užsakymų kiekį
+SELECT paslaugos_id, COUNT(uzsakymo_id) AS uzsakymu_kiekis
+FROM papildomos_paslaugos
+GROUP BY paslaugos_id
+ORDER BY uzsakymu_kiekis DESC
+LIMIT 1;
+
 -- 26.Rezervavimas.Atrinkti visus klientus, kurie turi aktyvias rezervacijas
+SELECT DISTINCT kliento_id
+FROM rezervacijos
+WHERE pabaigos_data >= CURDATE();
+
 -- 27.Rezervavimas.Rasti vidutinį rezervacijos laiką (nuo pradžios iki pabaigos datos)
+SELECT AVG(DATEDIFF(pabaigos_data, pradzios_data)) AS vidutine_rezervacijos_trukme_dienomis
+FROM rezervacijos;
+
 -- 28.Nuolaidos. Atrinkti užsakymus, kuriems buvo pritaikytos didžiausios nuolaidos
+SELECT uzsakymo_id, nuolaidos_suma
+FROM uzsakymu_nuolaidos
+ORDER BY nuolaidos_suma DESC
+LIMIT 1;
+
 -- 29.Apskaičiuoti bendrą nuolaidų sumą, pritaikytą užsakymams
+SELECT SUM(nuolaidos_suma) AS bendra_nuolaidu_suma
+FROM uzsakymu_nuolaidos;
+
 -- 30.Pristatymo vietos.Atrinkti visus automobilius, kurie šiuo metu yra konkrečioje pristatymo vietoje
+SELECT automobilio_id
+FROM pristatymo_vietos
+WHERE vietos_id = 3 AND dabartine_vieta = 1;
+-- Arba, jei pagal datas::
+SELECT automobilio_id
+FROM pristatymo_vietos
+WHERE vietos_id = 3 AND pabaigos_data IS NULL;
+
 -- 31.Pristatymo vietos.Rasti miestą, kuriame yra daugiausia pristatymo vietų
+SELECT miestas, COUNT(*) AS vietu_kiekis
+FROM pristatymo_vietos
+GROUP BY miestas
+ORDER BY vietu_kiekis DESC
+LIMIT 1;
+
 -- 32.Bonusų naudojimas.Gauti klientus, kurie panaudojo daugiausiai bonus taškų
-
-
+SELECT kliento_id, SUM(panaudoti_taskai) AS is_viso_panaudota
+FROM bonusai
+GROUP BY kliento_id
+ORDER BY is_viso_panaudota DESC
+LIMIT 1;
 
 -- 33.Gauti visų rezervacijų informaciją kartu su kliento vardu ir pavarde
 SELECT r.rezervacijos_id, r.rezervacijos_pradzia, r.rezervacijos_pabaiga, 
@@ -181,9 +310,27 @@ JOIN Bonusu_Naudojimas bn ON k.kliento_id = bn.kliento_id
 GROUP BY k.kliento_id, k.vardas, k.pavarde
 ORDER BY panaudoti_taskai DESC;
 
+-- 46. Rasti automobilius, kuriuos klientai dažniausiai renkasi pagal klientų amžiaus grupes
+SELECT 
+    CASE 
+        WHEN TIMESTAMPDIFF(YEAR, k.gimimo_data, CURDATE()) < 25 THEN 'Jaunesni nei 25'
+        WHEN TIMESTAMPDIFF(YEAR, k.gimimo_data, CURDATE()) BETWEEN 25 AND 40 THEN '25-40'
+        ELSE 'Vyresni nei 40'
+    END AS amziaus_grupe,
+    a.marke,
+    a.modelis,
+    COUNT(*) AS uzsakymu_skaicius
+FROM Uzsakymai u
+JOIN Klientai k ON u.kliento_id = k.kliento_id
+JOIN Automobiliai a ON u.automobilio_id = a.automobilio_id
+GROUP BY amziaus_grupe, a.marke, a.modelis
+ORDER BY amziaus_grupe, uzsakymu_skaicius DESC;
 
-
-
+-- 47. Rasti „populiariausią mėnesį“ automobilių rezervacijoms
+SELECT MONTH(rezervacijos_pradzia) AS menuo, COUNT(*) AS rezervaciju_skaicius
+FROM Rezervavimas
+GROUP BY menuo
+ORDER BY rezervaciju_skaicius DESC;
 
 
 
