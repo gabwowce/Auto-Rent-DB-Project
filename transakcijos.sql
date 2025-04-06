@@ -100,23 +100,18 @@ CALL CreateUzsakymas(3, 21, 2, '2025-03-14', '2025-03-20', 1, 2, '');
 
 -------------------------------------------------------------------------------------------------------------------
 
-
--- Pradėti transakciją
+USE autorentdb;
 START TRANSACTION;
+	INSERT INTO autorentdb.baudu_registras (
+	    automobilio_id, baudos_priezastis, data, laikas, suma, kliento_id
+	) VALUES 
+	(25, 'Neleistinas parkavimas', '2025-03-15', '14:30:00', 50.00, 7);
+	UPDATE autorentdb.klientai  
+	SET bonus_taskai = GREATEST(0, bonus_taskai - 50)
+	WHERE kliento_id = 7;
+ROLLBACK;
 
--- 1. Naujos baudos registravimas klientui
-INSERT INTO `Baudu_Registras` (
-    `automobilio_id`, `baudos_priezastis`, `data`, `laikas`, `suma`, `kliento_id`
-) VALUES 
-(25, 'Neleistinas parkavimas', '2025-03-15', '14:30:00', 50.00, 6);
 
--- 2. Sumažinami kliento bonuso taškai
-UPDATE `Klientai` 
-SET `bonus_taskai` = GREATEST(0, `bonus_taskai` - 50)
-WHERE `id` = 6;
-
--- Patvirtinti transakciją
-COMMIT;
 
 START TRANSACTION;
 UPDATE `Klientai` 
