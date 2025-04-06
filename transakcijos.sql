@@ -113,11 +113,6 @@ ROLLBACK;
 
 
 
-START TRANSACTION;
-UPDATE `Klientai` 
-SET `bonus_taskai` = GREATEST(0, `bonus_taskai` - 50)
-WHERE `id` = 6;
-COMMIT;
 
 
 
