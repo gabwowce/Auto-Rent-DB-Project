@@ -316,7 +316,7 @@ SELECT a.spalva, COUNT(*) AS vienetų
 FROM Uzsakymai u
 JOIN Automobiliai a ON u.automobilio_id = a.automobilio_id
 GROUP BY a.spalva
-ORDER BY pasirinkimu_skaicius DESC;
+ORDER BY vienetų DESC;
 
 
 
